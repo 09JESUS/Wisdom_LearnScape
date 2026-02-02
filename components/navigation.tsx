@@ -15,7 +15,7 @@ export function Navigation() {
 
         <nav className="hidden items-center gap-8 md:flex">
           <Link
-            href="/dashboard/learner"
+            href="/dashboard"
             className="text-lg font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Parents Dashboard
