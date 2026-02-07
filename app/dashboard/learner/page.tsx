@@ -1,23 +1,13 @@
 "use client"
 
-"use client"
-
 import { useEffect, useState } from "react"
-import { jwtDecode } from "jwt-decode" // ✅ Named import
+import { useRouter } from "next/navigation"
 
 import { Footer } from "@/components/footer"
 import { WhatsappButton } from "@/components/whatsapp-button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import {
-  Users,
-  BookOpen,
-  Calendar,
-  MessageSquare,
-  User,
-  LogOut,
-  BookOpenIcon,
-} from "lucide-react"
+import { BookOpenIcon, Calendar, MessageSquare, User, LogOut } from "lucide-react"
 import Link from "next/link"
 import { NotificationBell } from "@/components/notification-bell"
 
@@ -42,7 +32,7 @@ type DashboardData = {
     subject: string
     start_time: string
     tutor_name: string
-  }
+  } | null
   unreadMessages: number
 }
 
@@ -50,58 +40,68 @@ export default function LearnerDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
   useEffect(() => {
-  const loadDashboard = async () => {
-    try {
-      const token = localStorage.getItem("token")
-      if (!token) throw new Error("User not logged in")
+    const loadDashboard = async () => {
+      setLoading(true)
+      setError(null)
 
-      const decoded = jwtDecode<{ userId: number }>(token)
-      const learnerId = decoded.userId
-
-      // ✅ res is declared ONCE and used everywhere
-      const res = await fetch(
-        `/api/learner/dashboard?learnerId=${learnerId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      try {
+        const token = localStorage.getItem("token")
+        if (!token) {
+          setError("Unauthorized: Please log in.")
+          return
         }
-      )
 
-      const json = await res.json()
+        const res = await fetch("/api/learner/dashboard", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
 
-      if (!res.ok) {
-        throw new Error(json?.message || "Failed to fetch dashboard")
+        const json = await res.json()
+
+        if (!res.ok) {
+          if (res.status === 401) setError("Unauthorized: Please log in.")
+          else if (res.status === 403) setError("Forbidden: You cannot access this page.")
+          else setError(json?.message || "Failed to fetch dashboard")
+          return
+        }
+
+        // ✅ Ensure all fields exist to avoid undefined errors
+        setData({
+          learner: {
+            first_name: json?.learner?.first_name || "Unknown",
+            last_name: json?.learner?.last_name || "",
+            grade: json?.learner?.grade || "N/A",
+          },
+          subscriptionPlan: json?.subscriptionPlan || "Free",
+          attendance: {
+            month: json?.attendance?.month ?? 0,
+            week: json?.attendance?.week ?? 0,
+          },
+          homework: {
+            completed: json?.homework?.completed ?? 0,
+            pending: json?.homework?.pending ?? 0,
+            overdue: json?.homework?.overdue ?? 0,
+          },
+          engagementScore: json?.engagementScore ?? 0,
+          todaySession: json?.todaySession || null,
+          unreadMessages: json?.unreadMessages ?? 0,
+        })
+      } catch (err: any) {
+        console.error("Dashboard fetch error:", err)
+        setError(err.message || "Something went wrong")
+      } finally {
+        setLoading(false)
       }
-
-      setData(json)
-    } catch (err: any) {
-      console.error("Dashboard error:", err)
-      setError(err.message || "Something went wrong")
-    } finally {
-      setLoading(false)
     }
-  }
 
-  loadDashboard()
-}, [])
+    loadDashboard()
+  }, [router])
 
-
-
-
-  if (loading) {
-    return <div className="p-10 text-center text-lg">Loading dashboard...</div>
-  }
-
-  if (error) {
-    return <div className="p-10 text-center text-red-600">{error}</div>
-  }
-
-  if (!data) {
-    return <div className="p-10 text-center">No dashboard data available.</div>
-  }
+  if (loading) return <div className="p-10 text-center text-lg">Loading dashboard...</div>
+  if (error) return <div className="p-10 text-center text-red-600">{error}</div>
+  if (!data) return <div className="p-10 text-center">No dashboard data available.</div>
 
   const { learner, subscriptionPlan, attendance, homework, engagementScore, todaySession, unreadMessages } = data
 
@@ -160,7 +160,11 @@ export default function LearnerDashboard() {
             <div className="flex items-center gap-4">
               <NotificationBell count={unreadMessages} />
               <Link href="/login">
-                <Button variant="outline" className="text-white border-white">
+                <Button
+                  variant="outline"
+                  className="text-white border-white"
+                  onClick={() => localStorage.removeItem("token")}
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   Log Out
                 </Button>
